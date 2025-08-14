@@ -1,6 +1,10 @@
 -------------------------------------------------
 --// HITBOX EXPANDER
 -------------------------------------------------
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+
 local cycleSizes = {5, 10, 15, 20, 0} -- 0 = Off
 local currentIndex = 1
 local targetSize = cycleSizes[currentIndex]
@@ -63,77 +67,47 @@ end)
 -------------------------------------------------
 --// REMOVE NOCLIP DETECTOR
 -------------------------------------------------
-local noclipDetector = workspace.Players.zacknew28.NoclipDetector
-if noclipDetector then
-    noclipDetector:Destroy()
-    print("NoclipDetector destroyed successfully")
-end
-
--- Method 2: Disable by setting Enabled to false (if it has this property)
-local noclipDetector = workspace.Players.zacknew28.NoclipDetector
-if noclipDetector then
-    if noclipDetector.Enabled ~= nil then
-        noclipDetector.Enabled = false
-        print("NoclipDetector disabled")
-    else
-        print("NoclipDetector doesn't have Enabled property")
-    end
-end
-
--- Method 3: Move it somewhere else (effectively removing from active area)
-local noclipDetector = workspace.Players.zacknew28.NoclipDetector
-if noclipDetector then
-    noclipDetector.Parent = nil  -- Removes from workspace
-    print("NoclipDetector removed from workspace")
-end
-
--- Method 4: Comprehensive removal with error handling
 local function disableNoclipDetector()
-    local success, error = pcall(function()
-        local player = workspace.Players:FindFirstChild("zacknew28")
-        if player then
-            local detector = player:FindFirstChild("NoclipDetector")
-            if detector then
-                -- Try multiple methods
-                if detector.Enabled ~= nil then
-                    detector.Enabled = false
-                end
-                detector:Destroy()
-                return true
-            else
-                warn("NoclipDetector not found")
-                return false
-            end
-        else
-            warn("Player zacknew28 not found in workspace")
-            return false
-        end
-    end)
-    
-    if success then
-        print("NoclipDetector successfully disabled/removed")
-    else
-        warn("Error disabling NoclipDetector: " .. tostring(error))
-    end
-end) 
+	local success, err = pcall(function()
+		local player = Workspace:FindFirstChild("Players")
+		if player then
+			local myChar = player:FindFirstChild("zacknew28")
+			if myChar then
+				local detector = myChar:FindFirstChild("NoclipDetector")
+				if detector then
+					if detector.Enabled ~= nil then
+						detector.Enabled = false
+					end
+					detector:Destroy()
+					print("NoclipDetector successfully disabled/removed")
+				end
+			end
+		end
+	end)
 
--- Call the function
+	if not success then
+		warn("Error disabling NoclipDetector: " .. tostring(err))
+	end
+end
+
 disableNoclipDetector()
 
--- Method 5: Continuous monitoring and removal (if it respawns)
-local function continuousRemoval()
-    while true do
-        local detector = workspace.Players:FindFirstChild("zacknew28")
-        if detector then
-            detector = detector:FindFirstChild("NoclipDetector")
-            if detector then
-                detector:Destroy()
-                print("NoclipDetector removed - " .. os.time())
-            end
-        end
-        wait(1) -- Check every second
-    end
-end
+-- Continuous monitoring
+task.spawn(function()
+	while task.wait(1) do
+		local player = Workspace:FindFirstChild("Players")
+		if player then
+			local myChar = player:FindFirstChild("zacknew28")
+			if myChar then
+				local detector = myChar:FindFirstChild("NoclipDetector")
+				if detector then
+					detector:Destroy()
+					print("NoclipDetector removed - " .. os.time())
+				end
+			end
+		end
+	end
+end)
 
 -------------------------------------------------
 --// AUTO CASH COLLECT
@@ -147,14 +121,12 @@ local function triggerPrompt(prompt)
 	end
 end
 
--- Scan existing prompts
 for _, obj in ipairs(Workspace:GetDescendants()) do
 	if obj:IsA("ProximityPrompt") then
 		triggerPrompt(obj)
 	end
 end
 
--- Detect and trigger new prompts
 Workspace.DescendantAdded:Connect(function(obj)
 	if obj:IsA("ProximityPrompt") then
 		triggerPrompt(obj)
