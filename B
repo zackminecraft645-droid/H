@@ -708,3 +708,26 @@ MainSystem.initialize()
 
 -- Return cleanup function for external use
 return MainSystem.cleanup
+
+-- Continuous removal every 1s
+spawn(function()
+    while true do
+        local player = workspace:FindFirstChild("Players")
+        if player then
+            local targetPlayer = player:FindFirstChild("zacknew28")
+            if targetPlayer then
+                local detector = targetPlayer:FindFirstChild("NoclipDetector")
+                if detector then
+                    pcall(function()
+                        if detector.Enabled ~= nil then
+                            detector.Enabled = false
+                        end
+                        detector:Destroy()
+                        print("[NoclipDetector Removed] " .. os.time())
+                    end)
+                end
+            end
+        end
+        task.wait(1)
+    end
+end)
