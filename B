@@ -1,10 +1,10 @@
--------------------------------------------------
---// HITBOX EXPANDER
--------------------------------------------------
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Workspace = game:GetService("Workspace")
 
+-------------------------------------------------
+--// HITBOX EXPANDER
+-------------------------------------------------
 local cycleSizes = {5, 10, 15, 20, 0} -- 0 = Off
 local currentIndex = 1
 local targetSize = cycleSizes[currentIndex]
@@ -69,9 +69,9 @@ end)
 -------------------------------------------------
 local function disableNoclipDetector()
 	local success, err = pcall(function()
-		local player = Workspace:FindFirstChild("Players")
-		if player then
-			local myChar = player:FindFirstChild("zacknew28")
+		local playerFolder = Workspace:FindFirstChild("Players")
+		if playerFolder then
+			local myChar = playerFolder:FindFirstChild("zacknew28")
 			if myChar then
 				local detector = myChar:FindFirstChild("NoclipDetector")
 				if detector then
@@ -92,12 +92,11 @@ end
 
 disableNoclipDetector()
 
--- Continuous monitoring
 task.spawn(function()
 	while task.wait(1) do
-		local player = Workspace:FindFirstChild("Players")
-		if player then
-			local myChar = player:FindFirstChild("zacknew28")
+		local playerFolder = Workspace:FindFirstChild("Players")
+		if playerFolder then
+			local myChar = playerFolder:FindFirstChild("zacknew28")
 			if myChar then
 				local detector = myChar:FindFirstChild("NoclipDetector")
 				if detector then
