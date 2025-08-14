@@ -1,1 +1,710 @@
+--// Hitbox Expander GUI with Button Cycle //--
 
+-- Configuration
+local cycleSizes = {5, 10, 15, 20, 0} -- 0 = Off
+local currentIndex = 1
+local targetSize = cycleSizes[currentIndex]
+
+-- Create GUI
+local ScreenGui = Instance.new("ScreenGui")
+local Button = Instance.new("TextButton")
+
+ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
+
+Button.Size = UDim2.new(0, 100, 0, 30)
+Button.Position = UDim2.new(0.5, -50, 0, 100)
+Button.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+Button.Text = "Hitbox: " .. targetSize
+Button.TextColor3 = Color3.fromRGB(0, 0, 0)
+Button.Parent = ScreenGui
+Button.Active = true
+Button.Draggable = true -- Make it movable
+
+-- Function to apply hitbox size
+local function updateHitboxes()
+    for _, player in ipairs(game.Players:GetPlayers()) do
+        if player ~= game.Players.LocalPlayer then
+            local char = player.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                if targetSize > 0 then
+                    char.HumanoidRootPart.Size = Vector3.new(targetSize, targetSize, targetSize)
+                    char.HumanoidRootPart.Transparency = 0.7
+                    char.HumanoidRootPart.BrickColor = BrickColor.new("Really red")
+                    char.HumanoidRootPart.Material = Enum.Material.Neon
+                    char.HumanoidRootPart.CanCollide = false
+                else
+                    char.HumanoidRootPart.Size = Vector3.new(2, 2, 1) -- default size
+                    char.HumanoidRootPart.Transparency = 1
+                end
+            end
+        end
+    end
+end
+
+-- Button click cycle
+Button.MouseButton1Click:Connect(function()
+    currentIndex = currentIndex + 1
+    if currentIndex > #cycleSizes then
+        currentIndex = 1
+    end
+    targetSize = cycleSizes[currentIndex]
+    Button.Text = "Hitbox: " .. targetSize
+    updateHitboxes()
+end)
+
+-- Keep updating hitboxes if new players spawn
+game.Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        wait(1)
+        updateHitboxes()
+    end)
+end)
+
+--[[
+    WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+    This will automatically trigger ProximityPrompts for items with "Cash" in their name.
+]]
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local Workspace = game:GetService("Workspace")
+
+-- Auto-complete cash prompts
+ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
+    if player == LocalPlayer then return end -- Don't auto-complete our own triggers
+end)
+
+-- Function to check and trigger
+local function autoTriggerPrompt(prompt)
+    if string.find(prompt.Parent.Name:lower(), "cash") then
+        -- Instantly trigger
+        fireproximityprompt(prompt)
+    end
+end
+
+-- Scan existing prompts
+for _, v in ipairs(Workspace:GetDescendants()) do
+    if v:IsA("ProximityPrompt") then
+        v.HoldDuration = 0 -- instant interact
+        autoTriggerPrompt(v)
+    end
+end
+
+-- Detect new prompts that appear later
+Workspace.DescendantAdded:Connect(function(v)
+    if v:IsA("ProximityPrompt") then
+        v.HoldDuration = 0
+        autoTriggerPrompt(v)
+    end
+end)
+
+-- Initial apply
+while true do
+    updateHitboxes()
+    task.wait(0.5) -- refresh every 0.5s
+end
+
+-- Advanced Aimbot with FOV Circle
+-- Features: Visible FOV, Player targeting, Smooth aiming, Prediction, Wall check
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local mouse = player:GetMouse()
+
+-- ===== AIMBOT CONFIGURATION =====
+local Config = {
+    -- Core Settings
+    enabled = false,
+    aimKey = Enum.KeyCode.E, -- Hold E to aim
+    toggleKey = Enum.KeyCode.T, -- Press T to toggle aimbot
+    
+    -- FOV Settings
+    fovSize = 150, -- FOV circle radius in pixels
+    fovVisible = true,
+    fovColor = Color3.fromRGB(255, 255, 255),
+    fovTransparency = 0.8,
+    fovThickness = 2,
+    
+    -- Targeting Settings
+    targetPart = "Head", -- "Head", "Torso", or "HumanoidRootPart"
+    smoothness = 0.15, -- Lower = smoother (0.01 - 1)
+    prediction = true,
+    predictionStrength = 0.165,
+    
+    -- Advanced Features
+    wallCheck = true,
+    visibleCheck = true,
+    teamCheck = false, -- Don't target teammates
+    healthCheck = true, -- Don't target dead players
+    
+    -- Priority Settings
+    prioritizeClosest = true,
+    prioritizeLowestHealth = false,
+    prioritizeCrosshair = false, -- Prioritize targets closer to crosshair
+    
+    -- Visual Settings
+    showTarget = true,
+    targetColor = Color3.fromRGB(255, 0, 0),
+    showDistance = true,
+    showHealth = true,
+}
+
+-- ===== STATE VARIABLES =====
+local State = {
+    currentTarget = nil,
+    isAiming = false,
+    fovCircle = nil,
+    targetHighlight = nil,
+    connections = {},
+    gui = nil,
+    lastUpdate = 0,
+    updateInterval = 1/60, -- 60 FPS updates
+}
+
+-- ===== UTILITY FUNCTIONS =====
+local Utils = {}
+
+function Utils.createCircle()
+    local circle = Drawing.new("Circle")
+    circle.Color = Config.fovColor
+    circle.Thickness = Config.fovThickness
+    circle.Radius = Config.fovSize
+    circle.Filled = false
+    circle.Transparency = Config.fovTransparency
+    circle.Visible = Config.fovVisible
+    circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    return circle
+end
+
+function Utils.worldToScreen(position)
+    local screenPoint, onScreen = Camera:WorldToViewportPoint(position)
+    return Vector2.new(screenPoint.X, screenPoint.Y), onScreen, screenPoint.Z
+end
+
+function Utils.getDistance(pos1, pos2)
+    return (pos1 - pos2).Magnitude
+end
+
+function Utils.getScreenDistance(screenPos1, screenPos2)
+    return (screenPos1 - screenPos2).Magnitude
+end
+
+function Utils.isPointInCircle(point, center, radius)
+    return Utils.getScreenDistance(point, center) <= radius
+end
+
+function Utils.isPlayerAlive(targetPlayer)
+    if not targetPlayer.Character then return false end
+    local humanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+    return humanoid and humanoid.Health > 0
+end
+
+function Utils.canSeeTarget(targetPosition)
+    if not Config.wallCheck then return true end
+    
+    local rayOrigin = Camera.CFrame.Position
+    local rayDirection = (targetPosition - rayOrigin).Unit * (targetPosition - rayOrigin).Magnitude
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {player.Character}
+    
+    local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    
+    if not raycastResult then return true end
+    
+    -- Check if the hit is close to the target
+    local hitDistance = (raycastResult.Position - rayOrigin).Magnitude
+    local targetDistance = (targetPosition - rayOrigin).Magnitude
+    
+    return hitDistance >= (targetDistance - 3)
+end
+
+function Utils.getPredictedPosition(targetCharacter)
+    if not Config.prediction then 
+        return targetCharacter[Config.targetPart].Position 
+    end
+    
+    local humanoidRootPart = targetCharacter:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then 
+        return targetCharacter[Config.targetPart].Position 
+    end
+    
+    local velocity = humanoidRootPart.Velocity
+    local distance = Utils.getDistance(Camera.CFrame.Position, targetCharacter[Config.targetPart].Position)
+    local timeToTarget = distance / 1000 -- Adjust based on weapon speed
+    
+    local predictedPosition = targetCharacter[Config.targetPart].Position + (velocity * Config.predictionStrength)
+    return predictedPosition
+end
+
+-- ===== TARGET SYSTEM =====
+local TargetSystem = {}
+
+function TargetSystem.getValidTargets()
+    local targets = {}
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        if targetPlayer ~= player and targetPlayer.Character then
+            -- Health check
+            if Config.healthCheck and not Utils.isPlayerAlive(targetPlayer) then
+                continue
+            end
+            
+            -- Team check
+            if Config.teamCheck and targetPlayer.Team == player.Team then
+                continue
+            end
+            
+            local targetPart = targetPlayer.Character:FindFirstChild(Config.targetPart)
+            if not targetPart then continue end
+            
+            local predictedPos = Utils.getPredictedPosition(targetPlayer.Character)
+            local screenPos, onScreen, depth = Utils.worldToScreen(predictedPos)
+            
+            -- Screen visibility check
+            if not onScreen or depth <= 0 then continue end
+            
+            -- FOV check
+            if not Utils.isPointInCircle(screenPos, screenCenter, Config.fovSize) then
+                continue
+            end
+            
+            -- Wall check
+            if Config.visibleCheck and not Utils.canSeeTarget(predictedPos) then
+                continue
+            end
+            
+            local distance = Utils.getDistance(Camera.CFrame.Position, targetPart.Position)
+            local screenDistance = Utils.getScreenDistance(screenPos, screenCenter)
+            local humanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+            
+            table.insert(targets, {
+                player = targetPlayer,
+                character = targetPlayer.Character,
+                part = targetPart,
+                position = predictedPos,
+                screenPos = screenPos,
+                distance = distance,
+                screenDistance = screenDistance,
+                health = humanoid and humanoid.Health or 100,
+                priority = 0
+            })
+        end
+    end
+    
+    return targets
+end
+
+function TargetSystem.calculatePriority(target)
+    local priority = 0
+    
+    if Config.prioritizeClosest then
+        priority += (1000 - target.distance) * 2
+    end
+    
+    if Config.prioritizeLowestHealth then
+        priority += (100 - target.health) * 3
+    end
+    
+    if Config.prioritizeCrosshair then
+        priority += (Config.fovSize - target.screenDistance) * 1.5
+    end
+    
+    return priority
+end
+
+function TargetSystem.getBestTarget()
+    local targets = TargetSystem.getValidTargets()
+    if #targets == 0 then return nil end
+    
+    local bestTarget = nil
+    local highestPriority = -math.huge
+    
+    for _, target in ipairs(targets) do
+        target.priority = TargetSystem.calculatePriority(target)
+        
+        if target.priority > highestPriority then
+            highestPriority = target.priority
+            bestTarget = target
+        end
+    end
+    
+    return bestTarget
+end
+
+-- ===== AIMBOT SYSTEM =====
+local AimbotSystem = {}
+
+function AimbotSystem.aimAtTarget(target)
+    if not target then return end
+    
+    local targetPosition = target.position
+    local cameraPosition = Camera.CFrame.Position
+    
+    -- Calculate aim direction
+    local direction = (targetPosition - cameraPosition).Unit
+    local targetCFrame = CFrame.lookAt(cameraPosition, cameraPosition + direction)
+    
+    -- Apply smooth aiming
+    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, Config.smoothness)
+end
+
+function AimbotSystem.update()
+    if not Config.enabled then 
+        State.currentTarget = nil
+        return 
+    end
+    
+    -- Check if aim key is being held
+    State.isAiming = UserInputService:IsKeyDown(Config.aimKey)
+    
+    if State.isAiming then
+        local newTarget = TargetSystem.getBestTarget()
+        
+        -- Sticky targeting - keep current target if it's still valid
+        if State.currentTarget and newTarget then
+            local currentTargetValid = false
+            local targets = TargetSystem.getValidTargets()
+            
+            for _, target in ipairs(targets) do
+                if target.player == State.currentTarget.player then
+                    currentTargetValid = true
+                    State.currentTarget = target
+                    break
+                end
+            end
+            
+            if not currentTargetValid then
+                State.currentTarget = newTarget
+            end
+        else
+            State.currentTarget = newTarget
+        end
+        
+        -- Aim at target
+        if State.currentTarget then
+            AimbotSystem.aimAtTarget(State.currentTarget)
+        end
+    else
+        State.currentTarget = nil
+    end
+end
+
+-- ===== VISUAL SYSTEM =====
+local VisualSystem = {}
+
+function VisualSystem.updateFOVCircle()
+    if State.fovCircle then
+        local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        State.fovCircle.Position = screenCenter
+        State.fovCircle.Radius = Config.fovSize
+        State.fovCircle.Color = Config.fovColor
+        State.fovCircle.Visible = Config.fovVisible and Config.enabled
+        State.fovCircle.Transparency = Config.fovTransparency
+    end
+end
+
+function VisualSystem.createTargetHighlight(target)
+    if not Config.showTarget or not target then return end
+    
+    VisualSystem.removeTargetHighlight()
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = target.character
+    highlight.FillColor = Config.targetColor
+    highlight.FillTransparency = 0.7
+    highlight.OutlineColor = Config.targetColor
+    highlight.OutlineTransparency = 0
+    highlight.Parent = target.character
+    
+    State.targetHighlight = highlight
+end
+
+function VisualSystem.removeTargetHighlight()
+    if State.targetHighlight then
+        State.targetHighlight:Destroy()
+        State.targetHighlight = nil
+    end
+end
+
+function VisualSystem.update()
+    VisualSystem.updateFOVCircle()
+    
+    if State.currentTarget then
+        VisualSystem.createTargetHighlight(State.currentTarget)
+    else
+        VisualSystem.removeTargetHighlight()
+    end
+end
+
+-- ===== GUI SYSTEM =====
+local GUISystem = {}
+
+function GUISystem.createGUI()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "AimbotGUI"
+    ScreenGui.Parent = player:WaitForChild("PlayerGui")
+    ScreenGui.ResetOnSpawn = false
+    
+    -- Main Frame
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0, 350, 0, 400)
+    MainFrame.Position = UDim2.new(0, 20, 0.5, -200)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    MainFrame.BackgroundTransparency = 0.1
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Parent = ScreenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = MainFrame
+    
+    -- Title
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 40)
+    Title.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    Title.Text = "🎯 Advanced Aimbot"
+    Title.TextColor3 = Color3.fromRGB(100, 200, 255)
+    Title.TextScaled = true
+    Title.Font = Enum.Font.SourceSansBold
+    Title.Parent = MainFrame
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 10)
+    titleCorner.Parent = Title
+    
+    -- Status
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Size = UDim2.new(1, -20, 0, 30)
+    StatusLabel.Position = UDim2.new(0, 10, 0, 50)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = "Status: DISABLED - Press T to toggle"
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    StatusLabel.TextScaled = true
+    StatusLabel.Font = Enum.Font.SourceSansBold
+    StatusLabel.Parent = MainFrame
+    
+    -- Create toggle button
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Size = UDim2.new(1, -20, 0, 40)
+    ToggleButton.Position = UDim2.new(0, 10, 0, 90)
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    ToggleButton.Text = "Toggle Aimbot (T)"
+    ToggleButton.TextColor3 = Color3.new(1, 1, 1)
+    ToggleButton.TextScaled = true
+    ToggleButton.Font = Enum.Font.SourceSansBold
+    ToggleButton.Parent = MainFrame
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 8)
+    buttonCorner.Parent = ToggleButton
+    
+    -- Settings sliders
+    local function createSlider(name, min, max, default, posY, callback)
+        local SliderFrame = Instance.new("Frame")
+        SliderFrame.Size = UDim2.new(1, -20, 0, 50)
+        SliderFrame.Position = UDim2.new(0, 10, 0, posY)
+        SliderFrame.BackgroundTransparency = 1
+        SliderFrame.Parent = MainFrame
+        
+        local SliderLabel = Instance.new("TextLabel")
+        SliderLabel.Size = UDim2.new(1, 0, 0, 20)
+        SliderLabel.BackgroundTransparency = 1
+        SliderLabel.Text = name .. ": " .. default
+        SliderLabel.TextColor3 = Color3.new(1, 1, 1)
+        SliderLabel.TextScaled = true
+        SliderLabel.Font = Enum.Font.SourceSans
+        SliderLabel.Parent = SliderFrame
+        
+        local SliderBack = Instance.new("Frame")
+        SliderBack.Size = UDim2.new(1, 0, 0, 20)
+        SliderBack.Position = UDim2.new(0, 0, 0, 25)
+        SliderBack.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        SliderBack.BorderSizePixel = 0
+        SliderBack.Parent = SliderFrame
+        
+        local sliderBackCorner = Instance.new("UICorner")
+        sliderBackCorner.CornerRadius = UDim.new(0, 10)
+        sliderBackCorner.Parent = SliderBack
+        
+        local SliderFill = Instance.new("Frame")
+        SliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+        SliderFill.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+        SliderFill.BorderSizePixel = 0
+        SliderFill.Parent = SliderBack
+        
+        local sliderFillCorner = Instance.new("UICorner")
+        sliderFillCorner.CornerRadius = UDim.new(0, 10)
+        sliderFillCorner.Parent = SliderFill
+        
+        local SliderButton = Instance.new("TextButton")
+        SliderButton.Size = UDim2.new(1, 0, 1, 0)
+        SliderButton.BackgroundTransparency = 1
+        SliderButton.Text = ""
+        SliderButton.Parent = SliderBack
+        
+        local dragging = false
+        
+        SliderButton.MouseButton1Down:Connect(function()
+            dragging = true
+        end)
+        
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local mousePos = UserInputService:GetMouseLocation()
+                local sliderPos = SliderBack.AbsolutePosition
+                local sliderSize = SliderBack.AbsoluteSize
+                
+                local relativeX = math.clamp((mousePos.X - sliderPos.X) / sliderSize.X, 0, 1)
+                local value = min + (max - min) * relativeX
+                
+                SliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
+                SliderLabel.Text = name .. ": " .. math.floor(value * 10) / 10
+                
+                callback(value)
+            end
+        end)
+    end
+    
+    -- FOV Size Slider
+    createSlider("FOV Size", 50, 300, Config.fovSize, 150, function(value)
+        Config.fovSize = value
+    end)
+    
+    -- Smoothness Slider
+    createSlider("Smoothness", 0.01, 1, Config.smoothness, 210, function(value)
+        Config.smoothness = value
+    end)
+    
+    -- Prediction Slider
+    createSlider("Prediction", 0, 0.5, Config.predictionStrength, 270, function(value)
+        Config.predictionStrength = value
+    end)
+    
+    -- Toggle button functionality
+    ToggleButton.MouseButton1Click:Connect(function()
+        Config.enabled = not Config.enabled
+        if Config.enabled then
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+            StatusLabel.Text = "Status: ENABLED - Hold E to aim"
+            StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        else
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            StatusLabel.Text = "Status: DISABLED - Press T to toggle"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end
+    end)
+    
+    State.gui = ScreenGui
+end
+
+-- ===== INPUT SYSTEM =====
+local InputSystem = {}
+
+function InputSystem.setupInput()
+    State.connections.keyPress = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        
+        if input.KeyCode == Config.toggleKey then
+            Config.enabled = not Config.enabled
+            
+            -- Update GUI if it exists
+            if State.gui then
+                local toggleButton = State.gui:FindFirstChild("Frame"):FindFirstChild("TextButton")
+                local statusLabel = State.gui:FindFirstChild("Frame"):FindFirstChild("TextLabel")
+                
+                if toggleButton and statusLabel then
+                    if Config.enabled then
+                        toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+                        statusLabel.Text = "Status: ENABLED - Hold E to aim"
+                        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+                    else
+                        toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+                        statusLabel.Text = "Status: DISABLED - Press T to toggle"
+                        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- ===== MAIN SYSTEM =====
+local MainSystem = {}
+
+function MainSystem.initialize()
+    -- Create FOV circle
+    State.fovCircle = Utils.createCircle()
+    
+    -- Setup GUI
+    GUISystem.createGUI()
+    
+    -- Setup input
+    InputSystem.setupInput()
+    
+    -- Main update loop
+    State.connections.renderStepped = RunService.RenderStepped:Connect(function()
+        local currentTime = tick()
+        if currentTime - State.lastUpdate >= State.updateInterval then
+            State.lastUpdate = currentTime
+            
+            AimbotSystem.update()
+            VisualSystem.update()
+        end
+    end)
+    
+    print("Advanced Aimbot loaded!")
+    print("Press T to toggle aimbot")
+    print("Hold E to aim at targets")
+end
+
+function MainSystem.cleanup()
+    -- Disconnect all connections
+    for _, connection in pairs(State.connections) do
+        if connection then
+            connection:Disconnect()
+        end
+    end
+    
+    -- Clean up visuals
+    if State.fovCircle then
+        State.fovCircle:Remove()
+    end
+    
+    VisualSystem.removeTargetHighlight()
+    
+    if State.gui then
+        State.gui:Destroy()
+    end
+    
+    print("Aimbot cleaned up!")
+end
+
+-- Handle player leaving
+Players.PlayerRemoving:Connect(function(leavingPlayer)
+    if State.currentTarget and State.currentTarget.player == leavingPlayer then
+        State.currentTarget = nil
+    end
+end)
+
+-- Initialize the system
+MainSystem.initialize()
+
+-- Return cleanup function for external use
+return MainSystem.cleanup
