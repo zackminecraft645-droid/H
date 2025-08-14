@@ -1,116 +1,117 @@
-do
-    --// Hitbox Expander GUI with Button Cycle //--
-
-    local cycleSizes = {5, 10, 15, 20, 0} -- 0 = Off
-    local currentIndex = 1
-    local targetSize = cycleSizes[currentIndex]
-
-    local playerService = game:GetService("Players")
-    local LocalPlayer = playerService.LocalPlayer
-
-    local ScreenGui = Instance.new("ScreenGui")
-    local Button = Instance.new("TextButton")
-    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    ScreenGui.ResetOnSpawn = false
-
-    Button.Size = UDim2.new(0, 100, 0, 30)
-    Button.Position = UDim2.new(0.5, -50, 0, 100)
-    Button.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
-    Button.Text = "Hitbox: " .. targetSize
-    Button.TextColor3 = Color3.fromRGB(0, 0, 0)
-    Button.Parent = ScreenGui
-    Button.Active = true
-    Button.Draggable = true
-
-    local function updateHitboxes()
-        for _, player in ipairs(playerService:GetPlayers()) do
-            if player ~= LocalPlayer then
-                local char = player.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    if targetSize > 0 then
-                        char.HumanoidRootPart.Size = Vector3.new(targetSize, targetSize, targetSize)
-                        char.HumanoidRootPart.Transparency = 0.7
-                        char.HumanoidRootPart.BrickColor = BrickColor.new("Really red")
-                        char.HumanoidRootPart.Material = Enum.Material.Neon
-                        char.HumanoidRootPart.CanCollide = false
-                    else
-                        char.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
-                        char.HumanoidRootPart.Transparency = 1
-                    end
-                end
-            end
-        end
-    end
-
-    Button.MouseButton1Click:Connect(function()
-        currentIndex = (currentIndex % #cycleSizes) + 1
-        targetSize = cycleSizes[currentIndex]
-        Button.Text = "Hitbox: " .. targetSize
-        updateHitboxes()
-    end)
-
-    playerService.PlayerAdded:Connect(function(player)
-        player.CharacterAdded:Connect(function()
-            task.wait(1)
-            updateHitboxes()
-        end)
-    end)
-
-    task.spawn(function()
-        while task.wait(0.5) do
-            updateHitboxes()
-        end
-    end)
-end
-do
-    local Players = game:GetService("Players")
-    local function removeNoclipDetector(targetName)
-        local target = Players:FindFirstChild(targetName)
-        if target and target.Character then
-            local detector = target.Character:FindFirstChild("NoclipDetector")
-            if detector then
-                pcall(function()
-                    if detector.Enabled ~= nil then
-                        detector.Enabled = false
-                    end
-                    detector:Destroy()
-                    print("[NoclipDetector Removed]", os.time())
-                end)
-            end
-        end
-    end
-
-    task.spawn(function()
-        while task.wait(1) do
-            removeNoclipDetector("zacknew28")
-        end
-    end)
-end
--- Auto collect any ProximityPrompt with "Cash" in the name
+--// Services
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local ProximityPromptService = game:GetService("ProximityPromptService")
 
--- Function to trigger a prompt instantly
-local function triggerPrompt(prompt)
-    if string.find(prompt.Parent.Name:lower(), "cash") then
-        prompt.HoldDuration = 0 -- instant
-        task.spawn(function()
-            fireproximityprompt(prompt)
-        end)
-    end
+-------------------------------------------------
+--// HITBOX EXPANDER
+-------------------------------------------------
+local cycleSizes = {5, 10, 15, 20, 0} -- 0 = Off
+local currentIndex = 1
+local targetSize = cycleSizes[currentIndex]
+
+local ScreenGui = Instance.new("ScreenGui")
+local Button = Instance.new("TextButton")
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
+
+Button.Size = UDim2.new(0, 100, 0, 30)
+Button.Position = UDim2.new(0.5, -50, 0, 100)
+Button.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+Button.Text = "Hitbox: " .. targetSize
+Button.TextColor3 = Color3.fromRGB(0, 0, 0)
+Button.Parent = ScreenGui
+Button.Active = true
+Button.Draggable = true
+
+local function updateHitboxes()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			local char = player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				if targetSize > 0 then
+					hrp.Size = Vector3.new(targetSize, targetSize, targetSize)
+					hrp.Transparency = 0.7
+					hrp.BrickColor = BrickColor.new("Really red")
+					hrp.Material = Enum.Material.Neon
+					hrp.CanCollide = false
+				else
+					hrp.Size = Vector3.new(2, 2, 1)
+					hrp.Transparency = 1
+				end
+			end
+		end
+	end
 end
 
--- Scan for existing prompts
+Button.MouseButton1Click:Connect(function()
+	currentIndex = (currentIndex % #cycleSizes) + 1
+	targetSize = cycleSizes[currentIndex]
+	Button.Text = "Hitbox: " .. targetSize
+	updateHitboxes()
+end)
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function()
+		task.wait(1)
+		updateHitboxes()
+	end)
+end)
+
+task.spawn(function()
+	while task.wait(0.5) do
+		updateHitboxes()
+	end
+end)
+
+-------------------------------------------------
+--// REMOVE NOCLIP DETECTOR
+-------------------------------------------------
+local function removeNoclipDetector(targetName)
+	local target = Players:FindFirstChild(targetName)
+	local char = target and target.Character
+	local detector = char and char:FindFirstChild("NoclipDetector")
+	if detector then
+		pcall(function()
+			if detector.Enabled ~= nil then
+				detector.Enabled = false
+			end
+			detector:Destroy()
+			print("[NoclipDetector Removed]", os.time())
+		end)
+	end
+end
+
+task.spawn(function()
+	while task.wait(1) do
+		removeNoclipDetector("zacknew28")
+	end
+end)
+
+-------------------------------------------------
+--// AUTO CASH COLLECT
+-------------------------------------------------
+local function triggerPrompt(prompt)
+	if string.find(prompt.Parent.Name:lower(), "cash") then
+		prompt.HoldDuration = 0
+		task.spawn(function()
+			fireproximityprompt(prompt)
+		end)
+	end
+end
+
+-- Scan existing prompts
 for _, obj in ipairs(Workspace:GetDescendants()) do
-    if obj:IsA("ProximityPrompt") then
-        triggerPrompt(obj)
-    end
+	if obj:IsA("ProximityPrompt") then
+		triggerPrompt(obj)
+	end
 end
 
 -- Detect and trigger new prompts
 Workspace.DescendantAdded:Connect(function(obj)
-    if obj:IsA("ProximityPrompt") then
-        triggerPrompt(obj)
-    end
+	if obj:IsA("ProximityPrompt") then
+		triggerPrompt(obj)
+	end
 end)
