@@ -1,27 +1,28 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
 
 -------------------------------------------------
---// HITBOX EXPANDER
+--// HITBOX EXPANDER BUTTON
 -------------------------------------------------
-local cycleSizes = {5, 10, 15, 20, 0} -- 0 = Off
-local currentIndex = 1
-local targetSize = cycleSizes[currentIndex]
+local cycleSizes = {5, 10, 15, 20, 0}
+local currentHitboxIndex = 1
+local targetSize = cycleSizes[currentHitboxIndex]
 
-local ScreenGui = Instance.new("ScreenGui")
-local Button = Instance.new("TextButton")
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-ScreenGui.ResetOnSpawn = false
+local HitboxGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+HitboxGui.ResetOnSpawn = false
 
-Button.Size = UDim2.new(0, 100, 0, 30)
-Button.Position = UDim2.new(0.5, -50, 0, 100)
-Button.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
-Button.Text = "Hitbox: " .. targetSize
-Button.TextColor3 = Color3.fromRGB(0, 0, 0)
-Button.Parent = ScreenGui
-Button.Active = true
-Button.Draggable = true
+local HitboxButton = Instance.new("TextButton", HitboxGui)
+HitboxButton.Size = UDim2.new(0, 100, 0, 30)
+HitboxButton.Position = UDim2.new(0.4, -50, 0, 100)
+HitboxButton.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+HitboxButton.Text = "Hitbox: " .. targetSize
+HitboxButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+HitboxButton.Active = true
+HitboxButton.Draggable = true
 
 local function updateHitboxes()
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -44,23 +45,99 @@ local function updateHitboxes()
 	end
 end
 
-Button.MouseButton1Click:Connect(function()
-	currentIndex = (currentIndex % #cycleSizes) + 1
-	targetSize = cycleSizes[currentIndex]
-	Button.Text = "Hitbox: " .. targetSize
+HitboxButton.MouseButton1Click:Connect(function()
+	currentHitboxIndex = (currentHitboxIndex % #cycleSizes) + 1
+	targetSize = cycleSizes[currentHitboxIndex]
+	HitboxButton.Text = "Hitbox: " .. targetSize
 	updateHitboxes()
-end)
-
-Players.PlayerAdded:Connect(function(player)
-	player.CharacterAdded:Connect(function()
-		task.wait(1)
-		updateHitboxes()
-	end)
 end)
 
 task.spawn(function()
 	while task.wait(0.5) do
 		updateHitboxes()
+	end
+end)
+
+-------------------------------------------------
+--// NOCLIP BUTTON
+-------------------------------------------------
+local noclipEnabled = false
+
+local NoclipGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+NoclipGui.ResetOnSpawn = false
+
+local NoclipButton = Instance.new("TextButton", NoclipGui)
+NoclipButton.Size = UDim2.new(0, 100, 0, 30)
+NoclipButton.Position = UDim2.new(0.4, -50, 0, 140)
+NoclipButton.BackgroundColor3 = Color3.fromRGB(0, 255, 127)
+NoclipButton.Text = "Noclip: Off"
+NoclipButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+NoclipButton.Active = true
+NoclipButton.Draggable = true
+
+local function noclipLoop()
+	if noclipEnabled then
+		for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
+end
+
+NoclipButton.MouseButton1Click:Connect(function()
+	noclipEnabled = not noclipEnabled
+	NoclipButton.Text = "Noclip: " .. (noclipEnabled and "On" or "Off")
+end)
+
+RunService.Stepped:Connect(noclipLoop)
+
+-------------------------------------------------
+--// TP WALK BUTTON
+-------------------------------------------------
+local tpSpeeds = {1, 2, 3, 0} -- 0 = off
+local currentTpIndex = 1
+local tpSpeed = tpSpeeds[currentTpIndex]
+
+local TpGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+TpGui.ResetOnSpawn = false
+
+local TpButton = Instance.new("TextButton", TpGui)
+TpButton.Size = UDim2.new(0, 100, 0, 30)
+TpButton.Position = UDim2.new(0.4, -50, 0, 180)
+TpButton.BackgroundColor3 = Color3.fromRGB(0, 191, 255)
+TpButton.Text = "TPWalk: " .. tpSpeed
+TpButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+TpButton.Active = true
+TpButton.Draggable = true
+
+TpButton.MouseButton1Click:Connect(function()
+	currentTpIndex = (currentTpIndex % #tpSpeeds) + 1
+	tpSpeed = tpSpeeds[currentTpIndex]
+	TpButton.Text = "TPWalk: " .. tpSpeed
+end)
+
+RunService.Heartbeat:Connect(function()
+	if tpSpeed > 0 then
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			hrp.CFrame = hrp.CFrame + (hrp.CFrame.LookVector * tpSpeed)
+		end
+	end
+end)
+
+-------------------------------------------------
+--// FULLBRIGHT LOOP
+-------------------------------------------------
+task.spawn(function()
+	while task.wait(0.5) do
+		Lighting.Ambient = Color3.new(1, 1, 1)
+		Lighting.Brightness = 2
+		Lighting.ClockTime = 12
+		Lighting.FogEnd = 1e5
+		Lighting.GlobalShadows = false
+		Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
 	end
 end)
 
@@ -71,7 +148,7 @@ local function disableNoclipDetector()
 	local success, err = pcall(function()
 		local playerFolder = Workspace:FindFirstChild("Players")
 		if playerFolder then
-			local myChar = playerFolder:FindFirstChild("zacknew28")
+			local myChar = playerFolder:FindFirstChild(LocalPlayer.Name)
 			if myChar then
 				local detector = myChar:FindFirstChild("NoclipDetector")
 				if detector then
@@ -79,32 +156,19 @@ local function disableNoclipDetector()
 						detector.Enabled = false
 					end
 					detector:Destroy()
-					print("NoclipDetector successfully disabled/removed")
+					print("NoclipDetector removed")
 				end
 			end
 		end
 	end)
-
 	if not success then
 		warn("Error disabling NoclipDetector: " .. tostring(err))
 	end
 end
 
-disableNoclipDetector()
-
 task.spawn(function()
 	while task.wait(1) do
-		local playerFolder = Workspace:FindFirstChild("Players")
-		if playerFolder then
-			local myChar = playerFolder:FindFirstChild("zacknew28")
-			if myChar then
-				local detector = myChar:FindFirstChild("NoclipDetector")
-				if detector then
-					detector:Destroy()
-					print("NoclipDetector removed - " .. os.time())
-				end
-			end
-		end
+		disableNoclipDetector()
 	end
 end)
 
