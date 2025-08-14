@@ -69,26 +69,77 @@ end)
 -------------------------------------------------
 --// REMOVE NOCLIP DETECTOR
 -------------------------------------------------
-local function removeNoclipDetector(targetName)
-	local target = Players:FindFirstChild(targetName)
-	local char = target and target.Character
-	local detector = char and char:FindFirstChild("NoclipDetector")
-	if detector then
-		pcall(function()
-			if detector.Enabled ~= nil then
-				detector.Enabled = false
-			end
-			detector:Destroy()
-			print("[NoclipDetector Removed]", os.time())
-		end)
-	end
+local noclipDetector = workspace.Players.zacknew28.NoclipDetector
+if noclipDetector then
+    noclipDetector:Destroy()
+    print("NoclipDetector destroyed successfully")
 end
 
-task.spawn(function()
-	while task.wait(0.3) do
-		removeNoclipDetector("zacknew28")
-	end
-end)
+-- Method 2: Disable by setting Enabled to false (if it has this property)
+local noclipDetector = workspace.Players.zacknew28.NoclipDetector
+if noclipDetector then
+    if noclipDetector.Enabled ~= nil then
+        noclipDetector.Enabled = false
+        print("NoclipDetector disabled")
+    else
+        print("NoclipDetector doesn't have Enabled property")
+    end
+end
+
+-- Method 3: Move it somewhere else (effectively removing from active area)
+local noclipDetector = workspace.Players.zacknew28.NoclipDetector
+if noclipDetector then
+    noclipDetector.Parent = nil  -- Removes from workspace
+    print("NoclipDetector removed from workspace")
+end
+
+-- Method 4: Comprehensive removal with error handling
+local function disableNoclipDetector()
+    local success, error = pcall(function()
+        local player = workspace.Players:FindFirstChild("zacknew28")
+        if player then
+            local detector = player:FindFirstChild("NoclipDetector")
+            if detector then
+                -- Try multiple methods
+                if detector.Enabled ~= nil then
+                    detector.Enabled = false
+                end
+                detector:Destroy()
+                return true
+            else
+                warn("NoclipDetector not found")
+                return false
+            end
+        else
+            warn("Player zacknew28 not found in workspace")
+            return false
+        end
+    end)
+    
+    if success then
+        print("NoclipDetector successfully disabled/removed")
+    else
+        warn("Error disabling NoclipDetector: " .. tostring(error))
+    end
+end) 
+
+-- Call the function
+disableNoclipDetector()
+
+-- Method 5: Continuous monitoring and removal (if it respawns)
+local function continuousRemoval()
+    while true do
+        local detector = workspace.Players:FindFirstChild("zacknew28")
+        if detector then
+            detector = detector:FindFirstChild("NoclipDetector")
+            if detector then
+                detector:Destroy()
+                print("NoclipDetector removed - " .. os.time())
+            end
+        end
+        wait(1) -- Check every second
+    end
+end
 
 -------------------------------------------------
 --// AUTO CASH COLLECT
