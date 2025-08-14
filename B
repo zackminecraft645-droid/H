@@ -1,28 +1,45 @@
+-- Full script: fixed noclip-detector handling + InfiniteYield-style TPWalk (WASD + camera)
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+	Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+	LocalPlayer = Players.LocalPlayer
+end
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
 
 -------------------------------------------------
---// HITBOX EXPANDER BUTTON
+-- helper: create a separate floating draggable button
 -------------------------------------------------
-local cycleSizes = {5, 10, 15, 20, 0}
+local function createFloatingButton(positionUDim2, bgColor3, initialText)
+	local gui = Instance.new("ScreenGui")
+	gui.ResetOnSpawn = false
+	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 100, 0, 30)
+	btn.Position = positionUDim2
+	btn.BackgroundColor3 = bgColor3
+	btn.Text = initialText
+	btn.TextColor3 = Color3.new(0,0,0)
+	btn.Active = true
+	btn.Draggable = true
+	btn.Parent = gui
+
+	return btn
+end
+
+-------------------------------------------------
+-- HITBOX EXPANDER (button)
+-------------------------------------------------
+local cycleSizes = {5, 10, 15, 20, 0} -- 0 = Off
 local currentHitboxIndex = 1
 local targetSize = cycleSizes[currentHitboxIndex]
 
-local HitboxGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-HitboxGui.ResetOnSpawn = false
-
-local HitboxButton = Instance.new("TextButton", HitboxGui)
-HitboxButton.Size = UDim2.new(0, 100, 0, 30)
-HitboxButton.Position = UDim2.new(0.4, -50, 0, 100)
-HitboxButton.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
-HitboxButton.Text = "Hitbox: " .. targetSize
-HitboxButton.TextColor3 = Color3.fromRGB(0, 0, 0)
-HitboxButton.Active = true
-HitboxButton.Draggable = true
+local HitboxButton = createFloatingButton(UDim2.new(0.4, -50, 0, 100),
+	Color3.fromRGB(255,170,0), "Hitbox: "..targetSize)
 
 local function updateHitboxes()
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -37,6 +54,7 @@ local function updateHitboxes()
 					hrp.Material = Enum.Material.Neon
 					hrp.CanCollide = false
 				else
+					-- restore reasonable default (change if your game uses different default)
 					hrp.Size = Vector3.new(2, 2, 1)
 					hrp.Transparency = 1
 				end
@@ -48,137 +66,194 @@ end
 HitboxButton.MouseButton1Click:Connect(function()
 	currentHitboxIndex = (currentHitboxIndex % #cycleSizes) + 1
 	targetSize = cycleSizes[currentHitboxIndex]
-	HitboxButton.Text = "Hitbox: " .. targetSize
+	HitboxButton.Text = "Hitbox: "..targetSize
 	updateHitboxes()
 end)
 
+-- keep hitboxes in sync
 task.spawn(function()
 	while task.wait(0.5) do
 		updateHitboxes()
 	end
 end)
 
+Players.PlayerAdded:Connect(function(plr)
+	plr.CharacterAdded:Connect(function()
+		task.wait(1)
+		updateHitboxes()
+	end)
+end)
+
 -------------------------------------------------
---// NOCLIP BUTTON
+-- NOCLIP TOGGLE (button)
 -------------------------------------------------
 local noclipEnabled = false
+local NoclipButton = createFloatingButton(UDim2.new(0.4, -50, 0, 140),
+	Color3.fromRGB(0,255,127), "Noclip: Off")
 
-local NoclipGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-NoclipGui.ResetOnSpawn = false
-
-local NoclipButton = Instance.new("TextButton", NoclipGui)
-NoclipButton.Size = UDim2.new(0, 100, 0, 30)
-NoclipButton.Position = UDim2.new(0.4, -50, 0, 140)
-NoclipButton.BackgroundColor3 = Color3.fromRGB(0, 255, 127)
-NoclipButton.Text = "Noclip: Off"
-NoclipButton.TextColor3 = Color3.fromRGB(0, 0, 0)
-NoclipButton.Active = true
-NoclipButton.Draggable = true
-
-local function noclipLoop()
-	if noclipEnabled then
-		for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.CanCollide = false
-			end
+local function applyNoclip()
+	-- set CanCollide = false on every BasePart in character while enabled
+	local char = LocalPlayer.Character
+	if not char then return end
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			pcall(function() part.CanCollide = (not noclipEnabled) and true or false end)
 		end
 	end
 end
 
 NoclipButton.MouseButton1Click:Connect(function()
 	noclipEnabled = not noclipEnabled
-	NoclipButton.Text = "Noclip: " .. (noclipEnabled and "On" or "Off")
+	NoclipButton.Text = "Noclip: "..(noclipEnabled and "On" or "Off")
+	-- immediate apply
+	applyNoclip()
 end)
 
-RunService.Stepped:Connect(noclipLoop)
-
--------------------------------------------------
---// TP WALK BUTTON
--------------------------------------------------
-local tpSpeeds = {1, 2, 3, 0} -- 0 = off
-local currentTpIndex = 1
-local tpSpeed = tpSpeeds[currentTpIndex]
-
-local TpGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-TpGui.ResetOnSpawn = false
-
-local TpButton = Instance.new("TextButton", TpGui)
-TpButton.Size = UDim2.new(0, 100, 0, 30)
-TpButton.Position = UDim2.new(0.4, -50, 0, 180)
-TpButton.BackgroundColor3 = Color3.fromRGB(0, 191, 255)
-TpButton.Text = "TPWalk: " .. tpSpeed
-TpButton.TextColor3 = Color3.fromRGB(0, 0, 0)
-TpButton.Active = true
-TpButton.Draggable = true
-
-TpButton.MouseButton1Click:Connect(function()
-	currentTpIndex = (currentTpIndex % #tpSpeeds) + 1
-	tpSpeed = tpSpeeds[currentTpIndex]
-	TpButton.Text = "TPWalk: " .. tpSpeed
-end)
-
-RunService.Heartbeat:Connect(function()
-	if tpSpeed > 0 then
-		local char = LocalPlayer.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			hrp.CFrame = hrp.CFrame + (hrp.CFrame.LookVector * tpSpeed)
-		end
+-- apply continuously to avoid parts respawning with collisions
+RunService.Stepped:Connect(function()
+	if noclipEnabled then
+		pcall(applyNoclip)
 	end
 end)
 
 -------------------------------------------------
---// FULLBRIGHT LOOP
+-- TP WALK (InfiniteYield-style): camera-relative WASD TP
+-------------------------------------------------
+-- cycle speeds (0 = off). You can change values to increase per-second speed.
+local tpSpeeds = {1, 2, 3, 0} -- labeled values; actual studs/sec multiplier below
+local currentTpIndex = 1
+local tpSpeedSetting = tpSpeeds[currentTpIndex]
+
+local TpButton = createFloatingButton(UDim2.new(0.4, -50, 0, 180),
+	Color3.fromRGB(0,191,255), "TPWalk: "..tpSpeedSetting)
+
+-- movement state
+local moveState = {W=false, A=false, S=false, D=false, Space=false}
+local speedMultiplier = 16 -- studs per second per speed unit (tweak this to taste)
+
+local function setTpText()
+	TpButton.Text = "TPWalk: "..tpSpeedSetting
+end
+
+TpButton.MouseButton1Click:Connect(function()
+	currentTpIndex = (currentTpIndex % #tpSpeeds) + 1
+	tpSpeedSetting = tpSpeeds[currentTpIndex]
+	setTpText()
+end)
+
+-- Input handlers (ignore when typing in a textbox)
+UserInputService.InputBegan:Connect(function(inp, processed)
+	if processed then return end
+	if inp.UserInputType == Enum.UserInputType.Keyboard then
+		local k = inp.KeyCode
+		if k == Enum.KeyCode.W or k == Enum.KeyCode.Up then moveState.W = true end
+		if k == Enum.KeyCode.S or k == Enum.KeyCode.Down then moveState.S = true end
+		if k == Enum.KeyCode.A or k == Enum.KeyCode.Left then moveState.A = true end
+		if k == Enum.KeyCode.D or k == Enum.KeyCode.Right then moveState.D = true end
+		if k == Enum.KeyCode.Space then moveState.Space = true end
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(inp, processed)
+	if inp.UserInputType == Enum.UserInputType.Keyboard then
+		local k = inp.KeyCode
+		if k == Enum.KeyCode.W or k == Enum.KeyCode.Up then moveState.W = false end
+		if k == Enum.KeyCode.S or k == Enum.KeyCode.Down then moveState.S = false end
+		if k == Enum.KeyCode.A or k == Enum.KeyCode.Left then moveState.A = false end
+		if k == Enum.KeyCode.D or k == Enum.KeyCode.Right then moveState.D = false end
+		if k == Enum.KeyCode.Space then moveState.Space = false end
+	end
+end)
+
+-- Heartbeat movement: teleport the HRP based on camera orientation and pressed keys
+RunService.Heartbeat:Connect(function(dt)
+	if tpSpeedSetting <= 0 then return end
+	-- don't move while typing in a TextBox
+	if UserInputService:GetFocusedTextBox() then return end
+
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local humanoid = char and char:FindFirstChildWhichIsA("Humanoid")
+	local cam = Workspace.CurrentCamera
+	if not hrp or not cam then return end
+
+	-- compute camera-relative forward/right vectors (flatten Y)
+	local camLook = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+	local camRight = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
+	if camLook.Magnitude == 0 then return end
+	camLook = camLook.Unit
+	camRight = (camRight.Magnitude > 0 and camRight.Unit) or Vector3.new(1,0,0)
+
+	local forward = 0
+	local right = 0
+	if moveState.W then forward = forward + 1 end
+	if moveState.S then forward = forward - 1 end
+	if moveState.D then right = right + 1 end
+	if moveState.A then right = right - 1 end
+
+	local dir = camLook * forward + camRight * right
+	if dir.Magnitude > 0 then
+		dir = dir.Unit
+		local step = dir * tpSpeedSetting * speedMultiplier * dt
+		-- teleport (preserve Y to avoid jitter; we add step horizontally)
+		local newCF = hrp.CFrame + Vector3.new(step.X, 0, step.Z)
+		-- Small safety: place Y slightly above ground to avoid falling through
+		hrp.CFrame = CFrame.new(newCF.Position, newCF.Position + camLook)
+	end
+
+	-- jump handling
+	if moveState.Space and humanoid then
+		-- trigger regular jump
+		humanoid.Jump = true
+	end
+end)
+
+-------------------------------------------------
+-- FULLBRIGHT (loop)
 -------------------------------------------------
 task.spawn(function()
 	while task.wait(0.5) do
-		Lighting.Ambient = Color3.new(1, 1, 1)
+		Lighting.Ambient = Color3.new(1,1,1)
 		Lighting.Brightness = 2
 		Lighting.ClockTime = 12
 		Lighting.FogEnd = 1e5
 		Lighting.GlobalShadows = false
-		Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+		Lighting.OutdoorAmbient = Color3.new(1,1,1)
 	end
 end)
 
 -------------------------------------------------
---// REMOVE NOCLIP DETECTOR
+-- Robust NOCLIP DETECTOR REMOVER (no hardcoded player name)
+-- scans likely places and destroys any "NoclipDetector" instances it finds
 -------------------------------------------------
-local function disableNoclipDetector()
-	local success, err = pcall(function()
-		local playerFolder = Workspace:FindFirstChild("Players")
-		if playerFolder then
-			local myChar = playerFolder:FindFirstChild(LocalPlayer.Name)
-			if myChar then
-				local detector = myChar:FindFirstChild("NoclipDetector")
-				if detector then
-					if detector.Enabled ~= nil then
-						detector.Enabled = false
-					end
-					detector:Destroy()
-					print("NoclipDetector removed")
-				end
-			end
+local function disableNoclipDetectorOnce()
+	local destroyed = 0
+	for _, inst in ipairs(Workspace:GetDescendants()) do
+		if inst and inst.Name == "NoclipDetector" then
+			pcall(function() inst:Destroy() end)
+			destroyed = destroyed + 1
 		end
-	end)
-	if not success then
-		warn("Error disabling NoclipDetector: " .. tostring(err))
+	end
+	if destroyed > 0 then
+		print("NoclipDetector removed (found "..tostring(destroyed)..")")
 	end
 end
 
+-- run immediately and continuously (in case it respawns)
 task.spawn(function()
 	while task.wait(1) do
-		disableNoclipDetector()
+		disableNoclipDetectorOnce()
 	end
 end)
 
 -------------------------------------------------
---// AUTO CASH COLLECT
+-- AUTO CASH COLLECT (ProximityPrompt trigger)
 -------------------------------------------------
 local function triggerPrompt(prompt)
-	if string.find(prompt.Parent.Name:lower(), "cash") then
-		prompt.HoldDuration = 0
-		task.spawn(function()
+	local parentName = (prompt.Parent and prompt.Parent.Name) or ""
+	if string.find(parentName:lower(), "cash") then
+		pcall(function()
+			prompt.HoldDuration = 0
 			fireproximityprompt(prompt)
 		end)
 	end
@@ -195,3 +270,5 @@ Workspace.DescendantAdded:Connect(function(obj)
 		triggerPrompt(obj)
 	end
 end)
+
+print("Script loaded: Hitbox, Noclip toggle, TPWalk (WASD camera-relative), Fullbright, NoclipDetector remover, AutoCash")
