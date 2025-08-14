@@ -85,7 +85,7 @@ local function removeNoclipDetector(targetName)
 end
 
 task.spawn(function()
-	while task.wait(1) do
+	while task.wait(0.3) do
 		removeNoclipDetector("zacknew28")
 	end
 end)
