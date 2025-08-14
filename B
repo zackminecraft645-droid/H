@@ -1,5 +1,3 @@
-local ProximityPromptService = game:GetService("ProximityPromptService")
-
 -------------------------------------------------
 --// HITBOX EXPANDER
 -------------------------------------------------
