@@ -1,274 +1,163 @@
--- Full script: fixed noclip-detector handling + InfiniteYield-style TPWalk (WASD + camera)
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local LocalPlayer = Players.LocalPlayer
+
+--// FullBright (Always On)
+local Lighting = game:GetService("Lighting")
+local function enableFullBright()
+    Lighting.Brightness = 2
+    Lighting.ClockTime = 14
+    Lighting.FogEnd = 1e10
+    Lighting.GlobalShadows = false
+    Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+end
+enableFullBright()
+RunService.RenderStepped:Connect(enableFullBright)
+
+--// Constantly remove NoclipDetector
+RunService.Heartbeat:Connect(function()
+    local detector = Workspace:FindFirstChild("Players")
+        and Workspace.Players:FindFirstChild(LocalPlayer.Name)
+        and Workspace.Players[LocalPlayer.Name]:FindFirstChild("NoclipDetector")
+    if detector then
+        detector:Destroy()
+    end
+end)
+
+--// Auto pickup cash
+--[[
+    WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+    This will automatically trigger ProximityPrompts for items with "Cash" in their name.
+]]
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then
-	Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-	LocalPlayer = Players.LocalPlayer
-end
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
 
--------------------------------------------------
--- helper: create a separate floating draggable button
--------------------------------------------------
-local function createFloatingButton(positionUDim2, bgColor3, initialText)
-	local gui = Instance.new("ScreenGui")
-	gui.ResetOnSpawn = false
-	gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+-- Auto-complete cash prompts
+ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
+    if player == LocalPlayer then return end -- Don't auto-complete our own triggers
+end)
 
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 100, 0, 30)
-	btn.Position = positionUDim2
-	btn.BackgroundColor3 = bgColor3
-	btn.Text = initialText
-	btn.TextColor3 = Color3.new(0,0,0)
-	btn.Active = true
-	btn.Draggable = true
-	btn.Parent = gui
-
-	return btn
+-- Function to check and trigger
+local function autoTriggerPrompt(prompt)
+    if string.find(prompt.Parent.Name:lower(), "cash") then
+        -- Instantly trigger
+        fireproximityprompt(prompt)
+    end
 end
 
--------------------------------------------------
--- HITBOX EXPANDER (button)
--------------------------------------------------
-local cycleSizes = {5, 10, 15, 20, 0} -- 0 = Off
-local currentHitboxIndex = 1
-local targetSize = cycleSizes[currentHitboxIndex]
-
-local HitboxButton = createFloatingButton(UDim2.new(0.4, -50, 0, 100),
-	Color3.fromRGB(255,170,0), "Hitbox: "..targetSize)
-
-local function updateHitboxes()
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer then
-			local char = player.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				if targetSize > 0 then
-					hrp.Size = Vector3.new(targetSize, targetSize, targetSize)
-					hrp.Transparency = 0.7
-					hrp.BrickColor = BrickColor.new("Really red")
-					hrp.Material = Enum.Material.Neon
-					hrp.CanCollide = false
-				else
-					-- restore reasonable default (change if your game uses different default)
-					hrp.Size = Vector3.new(2, 2, 1)
-					hrp.Transparency = 1
-				end
-			end
-		end
-	end
+-- Scan existing prompts
+for _, v in ipairs(Workspace:GetDescendants()) do
+    if v:IsA("ProximityPrompt") then
+        v.HoldDuration = 0 -- instant interact
+        autoTriggerPrompt(v)
+    end
 end
 
-HitboxButton.MouseButton1Click:Connect(function()
-	currentHitboxIndex = (currentHitboxIndex % #cycleSizes) + 1
-	targetSize = cycleSizes[currentHitboxIndex]
-	HitboxButton.Text = "Hitbox: "..targetSize
-	updateHitboxes()
+-- Detect new prompts that appear later
+Workspace.DescendantAdded:Connect(function(v)
+    if v:IsA("ProximityPrompt") then
+        v.HoldDuration = 0
+        autoTriggerPrompt(v)
+    end
 end)
 
--- keep hitboxes in sync
-task.spawn(function()
-	while task.wait(0.5) do
-		updateHitboxes()
-	end
+--// Floating Button Creator
+local function createButton(name, color, pos)
+    local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+    local Button = Instance.new("TextButton")
+    Button.Parent = ScreenGui
+    Button.Size = UDim2.new(0, 60, 0, 60)
+    Button.Position = pos
+    Button.BackgroundColor3 = color
+    Button.Text = name
+    Button.TextScaled = true
+    Button.Draggable = true
+    Button.Active = true
+    Button.AutoButtonColor = false
+    return Button
+end
+
+--// Hitbox Expander
+local cycleSizes = {5, 10, 15, 20, 0}
+local hitboxIndex = 1
+local hitboxButton = createButton("Hitbox", Color3.fromRGB(0, 170, 255), UDim2.new(0, 50, 0, 100))
+
+local function setHitbox(size)
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            v.Character.HumanoidRootPart.Size = Vector3.new(size, size, size)
+            v.Character.HumanoidRootPart.Transparency = size > 0 and 0.7 or 1
+            v.Character.HumanoidRootPart.CanCollide = false
+        end
+    end
+end
+
+hitboxButton.MouseButton1Click:Connect(function()
+    hitboxIndex = hitboxIndex % #cycleSizes + 1
+    setHitbox(cycleSizes[hitboxIndex])
+    hitboxButton.Text = "Hitbox\n" .. tostring(cycleSizes[hitboxIndex])
 end)
 
-Players.PlayerAdded:Connect(function(plr)
-	plr.CharacterAdded:Connect(function()
-		task.wait(1)
-		updateHitboxes()
-	end)
-end)
-
--------------------------------------------------
--- NOCLIP TOGGLE (button)
--------------------------------------------------
+--// Noclip Toggle
 local noclipEnabled = false
-local NoclipButton = createFloatingButton(UDim2.new(0.4, -50, 0, 140),
-	Color3.fromRGB(0,255,127), "Noclip: Off")
+local noclipButton = createButton("Noclip", Color3.fromRGB(255, 100, 100), UDim2.new(0, 120, 0, 100))
 
-local function applyNoclip()
-	-- set CanCollide = false on every BasePart in character while enabled
-	local char = LocalPlayer.Character
-	if not char then return end
-	for _, part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			pcall(function() part.CanCollide = (not noclipEnabled) and true or false end)
-		end
-	end
-end
-
-NoclipButton.MouseButton1Click:Connect(function()
-	noclipEnabled = not noclipEnabled
-	NoclipButton.Text = "Noclip: "..(noclipEnabled and "On" or "Off")
-	-- immediate apply
-	applyNoclip()
-end)
-
--- apply continuously to avoid parts respawning with collisions
 RunService.Stepped:Connect(function()
-	if noclipEnabled then
-		pcall(applyNoclip)
-	end
+    if noclipEnabled and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
 end)
 
--------------------------------------------------
--- TP WALK (InfiniteYield-style): camera-relative WASD TP
--------------------------------------------------
--- cycle speeds (0 = off). You can change values to increase per-second speed.
-local tpSpeeds = {1, 2, 3, 0} -- labeled values; actual studs/sec multiplier below
-local currentTpIndex = 1
-local tpSpeedSetting = tpSpeeds[currentTpIndex]
+noclipButton.MouseButton1Click:Connect(function()
+    noclipEnabled = not noclipEnabled
+    noclipButton.Text = "Noclip\n" .. (noclipEnabled and "ON" or "OFF")
+end)
 
-local TpButton = createFloatingButton(UDim2.new(0.4, -50, 0, 180),
-	Color3.fromRGB(0,191,255), "TPWalk: "..tpSpeedSetting)
+--[[
+    WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+    This will automatically trigger ProximityPrompts for items with "Cash" in their name.
+]]
 
--- movement state
-local moveState = {W=false, A=false, S=false, D=false, Space=false}
-local speedMultiplier = 16 -- studs per second per speed unit (tweak this to taste)
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local Workspace = game:GetService("Workspace")
 
-local function setTpText()
-	TpButton.Text = "TPWalk: "..tpSpeedSetting
+-- Auto-complete cash prompts
+ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
+    if player == LocalPlayer then return end -- Don't auto-complete our own triggers
+end)
+
+-- Function to check and trigger
+local function autoTriggerPrompt(prompt)
+    if string.find(prompt.Parent.Name:lower(), "cash") then
+        -- Instantly trigger
+        fireproximityprompt(prompt)
+    end
 end
 
-TpButton.MouseButton1Click:Connect(function()
-	currentTpIndex = (currentTpIndex % #tpSpeeds) + 1
-	tpSpeedSetting = tpSpeeds[currentTpIndex]
-	setTpText()
-end)
-
--- Input handlers (ignore when typing in a textbox)
-UserInputService.InputBegan:Connect(function(inp, processed)
-	if processed then return end
-	if inp.UserInputType == Enum.UserInputType.Keyboard then
-		local k = inp.KeyCode
-		if k == Enum.KeyCode.W or k == Enum.KeyCode.Up then moveState.W = true end
-		if k == Enum.KeyCode.S or k == Enum.KeyCode.Down then moveState.S = true end
-		if k == Enum.KeyCode.A or k == Enum.KeyCode.Left then moveState.A = true end
-		if k == Enum.KeyCode.D or k == Enum.KeyCode.Right then moveState.D = true end
-		if k == Enum.KeyCode.Space then moveState.Space = true end
-	end
-end)
-
-UserInputService.InputEnded:Connect(function(inp, processed)
-	if inp.UserInputType == Enum.UserInputType.Keyboard then
-		local k = inp.KeyCode
-		if k == Enum.KeyCode.W or k == Enum.KeyCode.Up then moveState.W = false end
-		if k == Enum.KeyCode.S or k == Enum.KeyCode.Down then moveState.S = false end
-		if k == Enum.KeyCode.A or k == Enum.KeyCode.Left then moveState.A = false end
-		if k == Enum.KeyCode.D or k == Enum.KeyCode.Right then moveState.D = false end
-		if k == Enum.KeyCode.Space then moveState.Space = false end
-	end
-end)
-
--- Heartbeat movement: teleport the HRP based on camera orientation and pressed keys
-RunService.Heartbeat:Connect(function(dt)
-	if tpSpeedSetting <= 0 then return end
-	-- don't move while typing in a TextBox
-	if UserInputService:GetFocusedTextBox() then return end
-
-	local char = LocalPlayer.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	local humanoid = char and char:FindFirstChildWhichIsA("Humanoid")
-	local cam = Workspace.CurrentCamera
-	if not hrp or not cam then return end
-
-	-- compute camera-relative forward/right vectors (flatten Y)
-	local camLook = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
-	local camRight = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
-	if camLook.Magnitude == 0 then return end
-	camLook = camLook.Unit
-	camRight = (camRight.Magnitude > 0 and camRight.Unit) or Vector3.new(1,0,0)
-
-	local forward = 0
-	local right = 0
-	if moveState.W then forward = forward + 1 end
-	if moveState.S then forward = forward - 1 end
-	if moveState.D then right = right + 1 end
-	if moveState.A then right = right - 1 end
-
-	local dir = camLook * forward + camRight * right
-	if dir.Magnitude > 0 then
-		dir = dir.Unit
-		local step = dir * tpSpeedSetting * speedMultiplier * dt
-		-- teleport (preserve Y to avoid jitter; we add step horizontally)
-		local newCF = hrp.CFrame + Vector3.new(step.X, 0, step.Z)
-		-- Small safety: place Y slightly above ground to avoid falling through
-		hrp.CFrame = CFrame.new(newCF.Position, newCF.Position + camLook)
-	end
-
-	-- jump handling
-	if moveState.Space and humanoid then
-		-- trigger regular jump
-		humanoid.Jump = true
-	end
-end)
-
--------------------------------------------------
--- FULLBRIGHT (loop)
--------------------------------------------------
-task.spawn(function()
-	while task.wait(0.5) do
-		Lighting.Ambient = Color3.new(1,1,1)
-		Lighting.Brightness = 2
-		Lighting.ClockTime = 12
-		Lighting.FogEnd = 1e5
-		Lighting.GlobalShadows = false
-		Lighting.OutdoorAmbient = Color3.new(1,1,1)
-	end
-end)
-
--------------------------------------------------
--- Robust NOCLIP DETECTOR REMOVER (no hardcoded player name)
--- scans likely places and destroys any "NoclipDetector" instances it finds
--------------------------------------------------
-local function disableNoclipDetectorOnce()
-	local destroyed = 0
-	for _, inst in ipairs(Workspace:GetDescendants()) do
-		if inst and inst.Name == "NoclipDetector" then
-			pcall(function() inst:Destroy() end)
-			destroyed = destroyed + 1
-		end
-	end
-	if destroyed > 0 then
-		print("NoclipDetector removed (found "..tostring(destroyed)..")")
-	end
+-- Scan existing prompts
+for _, v in ipairs(Workspace:GetDescendants()) do
+    if v:IsA("ProximityPrompt") then
+        v.HoldDuration = 0 -- instant interact
+        autoTriggerPrompt(v)
+    end
 end
 
--- run immediately and continuously (in case it respawns)
-task.spawn(function()
-	while task.wait(1) do
-		disableNoclipDetectorOnce()
-	end
+-- Detect new prompts that appear later
+Workspace.DescendantAdded:Connect(function(v)
+    if v:IsA("ProximityPrompt") then
+        v.HoldDuration = 0
+        autoTriggerPrompt(v)
+    end
 end)
-
--------------------------------------------------
--- AUTO CASH COLLECT (ProximityPrompt trigger)
--------------------------------------------------
-local function triggerPrompt(prompt)
-	local parentName = (prompt.Parent and prompt.Parent.Name) or ""
-	if string.find(parentName:lower(), "cash") then
-		pcall(function()
-			prompt.HoldDuration = 0
-			fireproximityprompt(prompt)
-		end)
-	end
-end
-
-for _, obj in ipairs(Workspace:GetDescendants()) do
-	if obj:IsA("ProximityPrompt") then
-		triggerPrompt(obj)
-	end
-end
-
-Workspace.DescendantAdded:Connect(function(obj)
-	if obj:IsA("ProximityPrompt") then
-		triggerPrompt(obj)
-	end
-end)
-
-print("Script loaded: Hitbox, Noclip toggle, TPWalk (WASD camera-relative), Fullbright, NoclipDetector remover, AutoCash")
